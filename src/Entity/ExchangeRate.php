@@ -8,6 +8,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: ExchangeRateRepository::class)]
 #[ORM\Index(name: 'idx_exchange_rates_date', columns: ['date'])]
+#[ORM\Table(name: 'exchange_rates')]
 class ExchangeRate {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -26,7 +27,7 @@ class ExchangeRate {
     #[ORM\Column(type: Types::DATE_MUTABLE)]
     private ?\DateTimeInterface $date = null;
 
-    #[ORM\OneToOne(cascade: ['persist', 'remove'])]
+    #[ORM\ManyToOne(targetEntity: RateSource::class)]
     private ?RateSource $source = null;
 
     public function getId(): ?int {

@@ -4,9 +4,13 @@ namespace App\Entity;
 
 use App\Repository\RateSourceRepository;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
+use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: RateSourceRepository::class)]
 #[ORM\Index(name: 'idx_rate_sources_name', columns: ['name'])]
+#[ORM\Table(name: 'rates_sources')]
+#[UniqueEntity(fields: ['name'])]
 class RateSource {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -20,10 +24,10 @@ class RateSource {
     private ?string $url = null;
 
     #[ORM\Column]
-    private ?bool $is_default = null;
+    private ?bool $isDefault = null;
 
     #[ORM\Column(length: 3)]
-    private ?string $base_currency = null;
+    private ?string $baseCurrencyCode = null;
 
     public function getId(): ?int {
         return $this->id;
@@ -49,22 +53,22 @@ class RateSource {
         return $this;
     }
 
-    public function isDefault(): ?bool {
-        return $this->is_default;
+    public function getIsDefault(): ?bool {
+        return $this->isDefault;
     }
 
-    public function setIsDefault(bool $is_default): static {
-        $this->is_default = $is_default;
+    public function setIsDefault(bool $isDefault): static {
+        $this->isDefault = $isDefault;
 
         return $this;
     }
 
-    public function getBaseCurrency(): ?string {
-        return $this->base_currency;
+    public function getBaseCurrencyCode(): ?string {
+        return $this->baseCurrencyCode;
     }
 
-    public function setBaseCurrency(string $base_currency): static {
-        $this->base_currency = $base_currency;
+    public function setBaseCurrencyCode(string $baseCurrencyCode): static {
+        $this->baseCurrencyCode = $baseCurrencyCode;
 
         return $this;
     }
