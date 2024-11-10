@@ -11,16 +11,16 @@ class RateSourcesFixture extends Fixture {
     public function load(ObjectManager $manager): void {
         $data = [
             [
-                'name'          => "ECB",
-                'url'           => "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml",
+                'name'             => "ECB",
+                'url'              => "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml",
                 'baseCurrencyCode' => 'EUR',
-                'isDefault'    => 1
+                'isDefault'        => 1
             ],
             [
-                'name'          => "CBR",
-                'url'           => "https://www.cbr.ru/scripts/XML_daily.asp",
+                'name'             => "CBR",
+                'url'              => "https://www.cbr.ru/scripts/XML_daily.asp",
                 'baseCurrencyCode' => 'RUB',
-                'isDefault'    => 0
+                'isDefault'        => 0
             ]
         ];
 
@@ -36,5 +36,9 @@ class RateSourcesFixture extends Fixture {
         }
 
         $manager->flush();
+    }
+
+    public static function getGroups(): array {
+        return ['rates_sources'];
     }
 }
