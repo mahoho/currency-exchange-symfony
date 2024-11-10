@@ -25,9 +25,9 @@ class CbrPullRatesService extends PullRatesService {
             $rates = [];
             foreach ($xml->Valute as $rate) {
                 $currency = (string)$rate->CharCode;
-                $value = filter_var($rate->Value, FILTER_VALIDATE_FLOAT);
-                $nominal = filter_var($rate->Nominal, FILTER_VALIDATE_FLOAT);
-                $valueConverted = (float)bcdiv($value, $nominal);
+                $value = $this->sanitizeNumericValue($rate->Value);
+                $nominal = $this->sanitizeNumericValue($rate->Nominal);
+                $valueConverted = $value / $nominal;
 
                 $rates[] = new RateDTO(
                     $currency,
@@ -41,6 +41,11 @@ class CbrPullRatesService extends PullRatesService {
         } catch (TransportExceptionInterface $e) {
             throw new \RuntimeException("Failed to fetch rates from CBR: " . $e->getMessage());
         }
+    }
+
+    private function sanitizeNumericValue(SimpleXMLElement $value): float{
+        $valueRaw = (string)$value;
+        return (float)str_replace(',', '.', $valueRaw);
     }
 
     public function supports(string $providerName): bool {
