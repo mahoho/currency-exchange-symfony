@@ -11,22 +11,21 @@ use DateTime;
 use InvalidArgumentException;
 
 class ExchangeRateService {
-    private ?RateSource $rateSource;
+    private ?RateSource $primaryRateSource;
 
     public function __construct(
         private readonly ExchangeRateRepository $exchangeRateRepository,
         private readonly RateSourceRepository   $rateSourceRepository,
     ) {
+        $this->primaryRateSource = $this->rateSourceRepository->findOneBy(['isDefault' => true]);
 
-        $this->rateSource = $this->rateSourceRepository->findOneBy(['isDefault' => 1]);
-
-        if(!$this->rateSource) {
-            throw new InvalidArgumentException("No default rate source configured in database");
+        if (!$this->primaryRateSource) {
+            throw new InvalidArgumentException("No default rate source configured in the database.");
         }
     }
 
     /**
-     * Converts an amount from one currency to another.
+     * Converts an amount from one currency to another, using primary source and fallback if necessary.
      *
      * @param float $amount
      * @param string $fromCurrencyCode
@@ -37,90 +36,127 @@ class ExchangeRateService {
     public function convertCurrency(float $amount, string $fromCurrencyCode, string $toCurrencyCode): float {
         $date = new DateTime();
 
+        // Case 1: Try to find a direct rate from fromCurrency to toCurrency
+        $directRateEntry = $this->exchangeRateRepository->findOneBy([
+            'currencyCode'     => $toCurrencyCode,
+            'baseCurrencyCode' => $fromCurrencyCode,
+            'date'             => $date,
+        ]);
+
+        if ($directRateEntry) {
+            $rate = $directRateEntry->getRate();
+            $convertedAmount = $amount * $rate;
+            return round($convertedAmount, 5);
+        }
+
+        // Case 2: Try to find an inverse rate from toCurrency to fromCurrency
+        $inverseRateEntry = $this->exchangeRateRepository->findOneBy([
+            'currencyCode'     => $fromCurrencyCode,
+            'baseCurrencyCode' => $toCurrencyCode,
+            'date'             => $date,
+        ]);
+
+        if ($inverseRateEntry) {
+            $rate = 1 / $inverseRateEntry->getRate();
+            $convertedAmount = $amount * $rate;
+            return round($convertedAmount, 5);
+        }
+
+        // Case 3: Use cross rates
         $fromRateEntry = $this->getRateEntryForCurrency($fromCurrencyCode, $date);
         $toRateEntry = $this->getRateEntryForCurrency($toCurrencyCode, $date);
 
-        if ($fromRateEntry === null || $toRateEntry === null) {
+        if (!$fromRateEntry || !$toRateEntry) {
             throw new WrongCurrencyCodeException("Exchange rate not found for '{$fromCurrencyCode}' or '{$toCurrencyCode}' on date {$date->format('Y-m-d')}.");
         }
 
-        $fromRate = $fromRateEntry->getRate();
-        $fromBaseCurrency = $fromRateEntry->getBaseCurrencyCode();
-        $toRate = $toRateEntry->getRate();
-        $toBaseCurrency = $toRateEntry->getBaseCurrencyCode();
+        $convertedAmount = $this->calculateCrossRateConversion($amount, $fromRateEntry, $toRateEntry);
 
-        // Case 1: Both currencies have the same base currency
-        if ($fromBaseCurrency === $toBaseCurrency) {
-            return round($amount / $fromRate * $toRate, 2);
-        }
-
-        // Case 2: Different base currencies - Convert via a common intermediate base
-        if ($fromBaseCurrency === $this->rateSource->defaultBaseCurrency) {
-            $fromToEurRate = $fromRate;
-        } else {
-            $fromToEurRate = 1 / $this->getRateForCurrency($fromBaseCurrency, $this->rateSource->defaultBaseCurrency, $date);
-        }
-
-        if ($toBaseCurrency === $this->rateSource->defaultBaseCurrency) {
-            $eurToToRate = $toRate;
-        } else {
-            $eurToToRate = $this->getRateForCurrency($this->rateSource->defaultBaseCurrency, $toBaseCurrency, $date);
-        }
-
-        $amountInEur = $amount / $fromToEurRate;
-        $convertedAmount = $amountInEur * $eurToToRate;
-
-        // to avoid float precision problem
-        return round($convertedAmount, 2);
+        return round($convertedAmount, 5);
     }
 
     /**
-     * Retrieves the rate entry for a specific currency and date.
-     * If the currency is the base currency, returns a pseudo-entry with rate 1.0.
-     *
+     * @param float $amount
+     * @param ExchangeRate $fromRateEntry
+     * @param ExchangeRate $toRateEntry
+     * @return float
+     * @throws WrongCurrencyCodeException
+     */
+    private function calculateCrossRateConversion(float $amount, ExchangeRate $fromRateEntry, ExchangeRate $toRateEntry): float {
+        $fromRate = $fromRateEntry->getRate();
+        $fromBaseCurrency = $fromRateEntry->getBaseCurrencyCode();
+
+        $toRate = $toRateEntry->getRate();
+        $toBaseCurrency = $toRateEntry->getBaseCurrencyCode();
+
+        if ($fromBaseCurrency === $toBaseCurrency) {
+            $convertedAmount = ($amount / $fromRate) * $toRate;
+            return $convertedAmount;
+        }
+
+        $crossRate = $this->getCrossRate($fromBaseCurrency, $toBaseCurrency);
+        $amountInToBaseCurrency = ($amount / $fromRate) * $crossRate;
+        $convertedAmount = $amountInToBaseCurrency * $toRate;
+
+        return $convertedAmount;
+    }
+
+    /**
+     * @param string $fromBaseCurrency
+     * @param string $toBaseCurrency
+     * @return float
+     * @throws WrongCurrencyCodeException
+     */
+    private function getCrossRate(string $fromBaseCurrency, string $toBaseCurrency): float {
+        if ($fromBaseCurrency === $toBaseCurrency) {
+            return 1.0;
+        }
+
+        $date = new DateTime();
+
+        $directRateEntry = $this->exchangeRateRepository->findOneBy([
+            'currencyCode'     => $toBaseCurrency,
+            'baseCurrencyCode' => $fromBaseCurrency,
+            'date'             => $date,
+        ]);
+
+        if ($directRateEntry) {
+            return $directRateEntry->getRate();
+        }
+
+        $inverseRateEntry = $this->exchangeRateRepository->findOneBy([
+            'currencyCode'     => $fromBaseCurrency,
+            'baseCurrencyCode' => $toBaseCurrency,
+            'date'             => $date,
+        ]);
+
+        if ($inverseRateEntry) {
+            return 1 / $inverseRateEntry->getRate();
+        }
+
+        throw new WrongCurrencyCodeException("Cross rate not found between base currencies '{$fromBaseCurrency}' and '{$toBaseCurrency}' on date {$date->format('Y-m-d')}.");
+    }
+
+    /**
      * @param string $currencyCode
      * @param DateTime $date
      * @return ExchangeRate|null
      */
     public function getRateEntryForCurrency(string $currencyCode, DateTime $date): ?ExchangeRate {
-        if ($currencyCode === $this->rateSource->defaultBaseCurrency) {
-            $baseEntry = new ExchangeRate();
-            $baseEntry->setCurrencyCode($currencyCode);
-            $baseEntry->setRate(1.0);
-            $baseEntry->setBaseCurrencyCode($currencyCode);
-            $baseEntry->setDate($date);
-            $baseEntry->setSource($this->rateSource);
+        $primarySourceRateEntry = $this->exchangeRateRepository->findOneBy([
+            'currencyCode' => $currencyCode,
+            'date'         => $date,
+            'source'       => $this->primaryRateSource,
+        ]);
 
-            return $baseEntry;
+        if ($primarySourceRateEntry) {
+            return $primarySourceRateEntry;
         }
 
+        // Fallback: Try to get the rate from any available source
         return $this->exchangeRateRepository->findOneBy([
             'currencyCode' => $currencyCode,
             'date'         => $date,
-            'source'       => $this->rateSource
         ]);
-    }
-
-    /**
-     * Retrieves the rate for converting one base currency to another.
-     *
-     * @param string $currencyCode
-     * @param string $baseCurrency
-     * @param DateTime $date
-     * @return float|null
-     */
-    public function getRateForCurrency(string $currencyCode, string $baseCurrency, DateTime $date): ?float {
-        if ($currencyCode === $baseCurrency) {
-            return 1.0;
-        }
-
-        $exchangeRate = $this->exchangeRateRepository->findOneBy([
-            'currencyCode' => $currencyCode,
-            'baseCurrency' => $baseCurrency,
-            'date'         => $date,
-        ]);
-
-        return $exchangeRate ? $exchangeRate->getRate() : null;
     }
 }
-
