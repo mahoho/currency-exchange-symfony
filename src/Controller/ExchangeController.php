@@ -17,8 +17,8 @@ class ExchangeController extends AbstractController {
     #[Route('/api/exchange/convert', name: 'app_exchange_convert', methods: ['GET', 'POST'])]
     public function convert(Request $request): Response {
         $amount = filter_var($request->query->get('amount'), FILTER_VALIDATE_FLOAT);
-        $fromCurrency = strtoupper($request->query->get('from'));
-        $toCurrency = strtoupper($request->query->get('to'));
+        $fromCurrency = $request->query->get('from');
+        $toCurrency = $request->query->get('to');
 
         if (!$amount || !$fromCurrency || !$toCurrency) {
             return $this->json(['error' => 'Missing required parameters: amount, from, to.'], Response::HTTP_BAD_REQUEST);
