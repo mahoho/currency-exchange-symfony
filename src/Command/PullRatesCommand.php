@@ -11,11 +11,13 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Scheduler\Attribute\AsPeriodicTask;
 
 #[AsCommand(
     name: 'app:pull-rates',
     description: 'Pull rates from specified source or from default one',
 )]
+#[AsPeriodicTask('1 day', schedule: 'default')]
 class PullRatesCommand extends Command {
     private PullRatesFactory $pullRatesFactory;
     private EntityManagerInterface $entityManager;
@@ -32,23 +34,19 @@ class PullRatesCommand extends Command {
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int {
-        $io = new SymfonyStyle($input, $output);
         $rateSourceName = $input->getArgument('rateSourceName');
 
-        if(!$rateSourceName) {
-            $rateSource = $this->entityManager->getRepository(RateSource::class)->findOneBy(['isDefault' => 1]);
-
-            if(!$rateSource) {
-                $io->error('No default rate source is configured');
-                return Command::FAILURE;
-            }
-
-            $rateSourceName = $rateSource->getName();
+        if($rateSourceName) {
+            $rateSources = $this->entityManager->getRepository(RateSource::class)->findBy(['name' => $rateSourceName]);
+        } else {
+            $rateSources = $this->entityManager->getRepository(RateSource::class)->findAll();
         }
 
-        $service = $this->pullRatesFactory->getService($rateSourceName);
-        $rates = $service->fetchRates();
-        $service->saveRates($rates);
+        foreach ($rateSources as $rateSource) {
+            $service = $this->pullRatesFactory->getService($rateSource->getName());
+            $rates = $service->fetchRates();
+            $service->saveRates($rates);
+        }
 
         return Command::SUCCESS;
     }
