@@ -4,10 +4,12 @@ namespace App\DataFixtures;
 
 use App\Entity\RateSource;
 use Doctrine\Bundle\FixturesBundle\Fixture;
+use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
+use Doctrine\Common\DataFixtures\OrderedFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 use function Symfony\Component\String\u;
 
-class RateSourcesFixture extends Fixture {
+class RateSourcesFixture extends Fixture implements FixtureGroupInterface, OrderedFixtureInterface {
     public function load(ObjectManager $manager): void {
         $data = [
             [
@@ -24,10 +26,10 @@ class RateSourcesFixture extends Fixture {
             ]
         ];
 
-        foreach ($data as $datum) {
+        foreach ($data as $row) {
             $rateSource = new RateSource();
             // we have no fill in Doctrine Entities like in Eloquent, so
-            foreach ($datum as $field => $value) {
+            foreach ($row as $field => $value) {
                 $method = 'set' . u($field)->camel()->title()->toString();
                 $rateSource->$method($value);
             }
@@ -40,5 +42,9 @@ class RateSourcesFixture extends Fixture {
 
     public static function getGroups(): array {
         return ['rates_sources'];
+    }
+
+    public function getOrder(): int {
+        return 1; // smaller means sooner
     }
 }
