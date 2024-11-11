@@ -30,15 +30,17 @@ class ExchangeRate {
     #[ORM\ManyToOne(targetEntity: RateSource::class)]
     private ?RateSource $source = null;
 
+    private ?int $sourceId = null;
+
     public function getId(): ?int {
         return $this->id;
     }
 
-    public function getRate(): ?string {
+    public function getRate(): ?float {
         return $this->rate;
     }
 
-    public function setRate(string $rate): static {
+    public function setRate(float $rate): static {
         $this->rate = $rate;
 
         return $this;
@@ -78,5 +80,13 @@ class ExchangeRate {
 
     public function setBaseCurrencyCode(?string $baseCurrencyCode): void {
         $this->baseCurrencyCode = $baseCurrencyCode;
+    }
+
+    public function setSourceId(?int $sourceId): void {
+        $this->sourceId = $sourceId;
+    }
+
+    public function getSourceId(): ?int {
+        return $this->sourceId;
     }
 }

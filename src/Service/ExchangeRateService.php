@@ -36,11 +36,11 @@ class ExchangeRateService {
     public function convertCurrency(float $amount, string $fromCurrencyCode, string $toCurrencyCode): float {
         $date = new DateTime();
 
-        // Case 1: Try to find a direct rate from fromCurrency to toCurrency
         $directRateEntry = $this->exchangeRateRepository->findOneBy([
             'currencyCode'     => $toCurrencyCode,
             'baseCurrencyCode' => $fromCurrencyCode,
             'date'             => $date,
+            'source'           => $this->primaryRateSource,
         ]);
 
         if ($directRateEntry) {
@@ -49,11 +49,11 @@ class ExchangeRateService {
             return round($convertedAmount, 5);
         }
 
-        // Case 2: Try to find an inverse rate from toCurrency to fromCurrency
         $inverseRateEntry = $this->exchangeRateRepository->findOneBy([
             'currencyCode'     => $fromCurrencyCode,
             'baseCurrencyCode' => $toCurrencyCode,
             'date'             => $date,
+            'source'           => $this->primaryRateSource,
         ]);
 
         if ($inverseRateEntry) {
@@ -62,7 +62,22 @@ class ExchangeRateService {
             return round($convertedAmount, 5);
         }
 
-        // Case 3: Use cross rates
+        $directRateEntry = $this->exchangeRateRepository->getByAnyDifferentSource($toCurrencyCode, $fromCurrencyCode, $date, $this->primaryRateSource);
+
+        if ($directRateEntry) {
+            $rate = $directRateEntry->getRate();
+            $convertedAmount = $amount * $rate;
+            return round($convertedAmount, 5);
+        }
+
+        $inverseRateEntry = $this->exchangeRateRepository->getByAnyDifferentSource($fromCurrencyCode, $toCurrencyCode, $date, $this->primaryRateSource);
+
+        if ($inverseRateEntry) {
+            $rate = 1 / $inverseRateEntry->getRate();
+            $convertedAmount = $amount * $rate;
+            return round($convertedAmount, 5);
+        }
+
         $fromRateEntry = $this->getRateEntryForCurrency($fromCurrencyCode, $date);
         $toRateEntry = $this->getRateEntryForCurrency($toCurrencyCode, $date);
 
@@ -118,6 +133,7 @@ class ExchangeRateService {
             'currencyCode'     => $toBaseCurrency,
             'baseCurrencyCode' => $fromBaseCurrency,
             'date'             => $date,
+            'source'           => $this->primaryRateSource,
         ]);
 
         if ($directRateEntry) {
@@ -128,7 +144,20 @@ class ExchangeRateService {
             'currencyCode'     => $fromBaseCurrency,
             'baseCurrencyCode' => $toBaseCurrency,
             'date'             => $date,
+            'source'           => $this->primaryRateSource,
         ]);
+
+        if ($inverseRateEntry) {
+            return 1 / $inverseRateEntry->getRate();
+        }
+
+        $directRateEntry = $this->exchangeRateRepository->getByAnyDifferentSource($toBaseCurrency, $fromBaseCurrency, $date, $this->primaryRateSource);
+
+        if ($directRateEntry) {
+            return $directRateEntry->getRate();
+        }
+
+        $inverseRateEntry = $this->exchangeRateRepository->getByAnyDifferentSource($fromBaseCurrency, $toBaseCurrency, $date, $this->primaryRateSource);
 
         if ($inverseRateEntry) {
             return 1 / $inverseRateEntry->getRate();
